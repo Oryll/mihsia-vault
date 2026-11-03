@@ -161,7 +161,7 @@
   <form method="dialog" class="sheet__form" id="entry-form" autocomplete="off">
     <header class="sheet__head">
       <h2 id="entry-title">新建条目</h2>
-      <button class="btn btn--icon" value="cancel" aria-label="关闭">
+      <button type="button" class="btn btn--icon" data-close aria-label="关闭">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg>
       </button>
     </header>
@@ -169,7 +169,7 @@
       <div class="grid2">
         <label class="field">
           <span class="field__label">名称</span>
-          <input id="e-title" type="text" required placeholder="例如 招商银行网银" maxlength="120">
+          <input id="e-title" type="text" aria-required="true" placeholder="例如 招商银行网银" maxlength="120">
         </label>
         <div class="field">
           <span class="field__label">分类</span>
@@ -210,7 +210,7 @@
     <footer class="sheet__foot">
       <button type="button" class="btn btn--danger-ghost" id="e-delete" hidden>删除这条</button>
       <span class="spacer"></span>
-      <button class="btn btn--ghost" value="cancel">取消</button>
+      <button type="button" class="btn btn--ghost" data-close>取消</button>
       <button class="btn btn--primary" type="submit" id="e-save">保存</button>
     </footer>
   </form>

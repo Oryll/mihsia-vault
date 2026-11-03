@@ -2,7 +2,12 @@
 
     python tools/e2e.py
 
-需要 vault_server.py 已经在 127.0.0.1:8765 跑着。
+⚠ 千万别指向 8765——那是用户自己的保险箱。测试脚本会建库、写条目、删条目，
+   所以默认只认 MIHSIA_TEST_URL，没设置就直接报错退出。
+   起一个隔离实例：
+
+       MIHSIA_DATA_DIR=/tmp/pv-data python vault_server.py 8921 --no-browser
+       MIHSIA_TEST_URL=http://127.0.0.1:8921/ python tools/e2e.py
 """
 
 import json
@@ -14,8 +19,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cdp  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SHOTS = os.path.join(ROOT, "shots")
-URL = "http://127.0.0.1:8765/"
+# 冒烟测试的截图是过程产物，不放进交付用的 shots/，免得把 01–08 那套图挤掉
+E2E_SHOTS = os.path.join(ROOT, "shots", "_e2e")
+
+URL = os.environ.get("MIHSIA_TEST_URL", "")
+if not URL:
+    sys.exit(
+        "没设置 MIHSIA_TEST_URL。测试会写数据，不能对着你自己在用的保险箱跑。\n"
+        "先起一个隔离实例：\n"
+        "  MIHSIA_DATA_DIR=/tmp/pv-data python vault_server.py 8921 --no-browser\n"
+        "再跑：\n"
+        "  MIHSIA_TEST_URL=http://127.0.0.1:8921/ python tools/e2e.py"
+    )
+
 MASTER = "correct horse battery staple 2024"
 
 HELPERS = r"""
@@ -76,7 +92,7 @@ ENTRIES = [
 
 def run(page):
     log = lambda s: print("·", s, flush=True)  # noqa: E731
-    os.makedirs(SHOTS, exist_ok=True)
+    os.makedirs(E2E_SHOTS, exist_ok=True)
 
     page.goto(URL, settle=1.2)
     page.js(HELPERS)
@@ -126,7 +142,7 @@ def run(page):
     # ── 3. 选中第一条并截图 ─────────────────────────────────────
     page.js("document.querySelector('#list .row').click()")
     time.sleep(0.6)
-    page.shot(os.path.join(SHOTS, "app-detail.png"))
+    page.shot(os.path.join(E2E_SHOTS, "app-detail.png"))
     log("截图 app-detail.png")
 
     # ── 4. 搜索 ────────────────────────────────────────────────
@@ -135,7 +151,7 @@ def run(page):
     hits = page.js("__t.count('#list .row')")
     log(f"搜索「银行」→ {hits} 条")
     assert hits >= 1, "搜索没结果"
-    page.shot(os.path.join(SHOTS, "app-search.png"))
+    page.shot(os.path.join(E2E_SHOTS, "app-search.png"))
 
     page.js("__t.set('#q', '')")
     time.sleep(0.4)
@@ -148,7 +164,7 @@ def run(page):
     pw = page.js("__t.text('#gen-out')")
     log(f"生成器给出 {len(pw or '')} 位：{pw}")
     assert pw and len(pw) >= 8, "生成器没出结果"
-    page.shot(os.path.join(SHOTS, "app-generator.png"))
+    page.shot(os.path.join(E2E_SHOTS, "app-generator.png"))
     page.js("document.querySelectorAll('dialog.sheet[open]').forEach(d => d.close())")
     time.sleep(0.3)
 
@@ -157,7 +173,7 @@ def run(page):
     time.sleep(0.5)
     page.js("document.querySelector('#list .row').click()")
     time.sleep(0.6)
-    page.shot(os.path.join(SHOTS, "app-bank.png"))
+    page.shot(os.path.join(E2E_SHOTS, "app-bank.png"))
     page.js("__t.click('#btn-all')")
     time.sleep(0.4)
 
@@ -167,7 +183,7 @@ def run(page):
     page.js("__t.set('#e-title', '示例条目')")
     page.js("__t.set('#e-pass', 'Mk7#qLp2vRt9wZb4')")
     time.sleep(0.4)
-    page.shot(os.path.join(SHOTS, "app-dialog.png"))
+    page.shot(os.path.join(E2E_SHOTS, "app-dialog.png"))
     page.js("document.querySelectorAll('dialog.sheet[open]').forEach(d => d.close())")
     time.sleep(0.3)
 
@@ -177,7 +193,7 @@ def run(page):
     locked = page.js("__t.visible('#form-unlock')")
     log(f"锁定后回到启封页：{locked}")
     assert locked, "锁定失败"
-    page.shot(os.path.join(SHOTS, "boot-unlock.png"))
+    page.shot(os.path.join(E2E_SHOTS, "boot-unlock.png"))
 
     print("\n全部通过 ✓", flush=True)
 

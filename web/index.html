@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="vault-token" content="__VAULT_TOKEN__">
+<title>密匣 · 本地密码保险箱</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232C5A4C'/%3E%3Cpath d='M9 14h14v11H9z' fill='%23F2F3EF'/%3E%3Cpath d='M12 14v-3a4 4 0 0 1 8 0v3' stroke='%23F2F3EF' stroke-width='2.2' fill='none'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<!-- ═══════════════ 启封 ═══════════════ -->
+<div id="boot" class="boot">
+  <div class="boot__stage">
+    <div class="boot__intro">
+      <div class="mark">
+        <span class="mark__seal">密</span>
+        <span class="mark__name">密匣</span>
+      </div>
+      <h1 class="boot__title" id="boot-title">密码存在这台电脑上。</h1>
+      <p class="boot__lede" id="boot-lede">只有主密码能打开它。它不联网、不上传，主密码也不会被存进任何文件。</p>
+      <dl class="facts">
+        <div><dt>落在磁盘上的</dt><dd>一段 AES-256-GCM 密文</dd></div>
+        <div><dt>解密地点</dt><dd>这个标签页，用完即弃</dd></div>
+        <div><dt>忘记主密码</dt><dd>没有任何后门能救回来</dd></div>
+      </dl>
+    </div>
+
+    <div class="boot__panel">
+      <!-- 解锁 -->
+      <form class="auth" id="form-unlock" autocomplete="off" hidden>
+        <h2 class="auth__title">启封</h2>
+        <label class="field">
+          <span class="field__label">主密码</span>
+          <span class="field__box">
+            <input id="unlock-pass" type="password" name="password" autocomplete="current-password"
+                   spellcheck="false" placeholder="输入主密码" required>
+            <button type="button" class="reveal" data-reveal="unlock-pass" aria-label="显示或隐藏密码">显示</button>
+          </span>
+        </label>
+        <p class="auth__error" id="unlock-error" role="alert" hidden></p>
+        <button class="btn btn--primary btn--block" type="submit" id="unlock-submit">启封</button>
+        <p class="auth__foot">密匣不会保存主密码，关掉窗口就得重新输入。</p>
+      </form>
+
+      <!-- 首次创建 -->
+      <form class="auth" id="form-create" autocomplete="off" hidden>
+        <h2 class="auth__title">给保险箱定一把锁</h2>
+        <label class="field">
+          <span class="field__label">设置主密码</span>
+          <span class="field__box">
+            <input id="create-pass" type="password" name="new-password" autocomplete="new-password"
+                   spellcheck="false" placeholder="至少 8 位，建议一句记得住的长口令" required>
+            <button type="button" class="reveal" data-reveal="create-pass" aria-label="显示或隐藏密码">显示</button>
+          </span>
+        </label>
+        <div class="meter" id="create-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <p class="meter__label" id="create-meter-label">还没开始</p>
+        <label class="field">
+          <span class="field__label">再输一次</span>
+          <span class="field__box">
+            <input id="create-pass2" type="password" autocomplete="new-password" spellcheck="false" placeholder="确认主密码" required>
+          </span>
+        </label>
+        <p class="auth__error" id="create-error" role="alert" hidden></p>
+        <button class="btn btn--primary btn--block" type="submit" id="create-submit">建立保险箱</button>
+        <p class="auth__foot">长口令比复杂短密码更难猜。<b>写下来，放在家里。</b></p>
+      </form>
+
+      <p class="auth__note" id="boot-note" hidden></p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ 主界面 ═══════════════ -->
+<div id="app" class="app" hidden>
+  <header class="topbar">
+    <button class="topbar__brand" id="btn-all" title="全部条目">
+      <span class="seal-mini" aria-hidden="true">密</span>
+      <span class="brand__name">密匣</span>
+    </button>
+
+    <div class="search">
+      <svg viewBox="0 0 20 20" aria-hidden="true" class="search__icon"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg>
+      <input id="q" type="search" placeholder="搜索名称、账号、网址或标签" autocomplete="off" spellcheck="false">
+      <kbd class="search__kbd">Ctrl K</kbd>
+    </div>
+
+    <div class="topbar__actions">
+      <button class="btn btn--primary" id="btn-new">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
+        新建
+      </button>
+      <button class="btn btn--ghost" id="btn-lock">锁定</button>
+      <button class="btn btn--icon" id="btn-menu" aria-haspopup="true" aria-expanded="false" aria-label="更多操作">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4.5" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="15.5" cy="10" r="1.4"/></svg>
+      </button>
+      <div class="menu" id="menu" hidden>
+        <button data-act="generate">密码生成器</button>
+        <button data-act="import">导入…</button>
+        <button data-act="export">导出…</button>
+        <hr>
+        <button data-act="folder">打开数据文件夹</button>
+        <button data-act="backup">立即备份密文</button>
+        <hr>
+        <button data-act="about">关于与安全说明</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左：分类与标签 -->
+    <aside class="rail" id="rail">
+      <nav class="rail__group" id="nav-cats" aria-label="分类"></nav>
+      <div class="rail__group">
+        <h3 class="rail__title">标签</h3>
+        <div class="tags" id="nav-tags"></div>
+      </div>
+      <div class="rail__foot" id="rail-foot"></div>
+    </aside>
+
+    <!-- 中：条目列表 -->
+    <section class="list-pane" aria-label="条目列表">
+      <div class="list-pane__head">
+        <h2 id="list-title">全部条目</h2>
+        <span class="count" id="list-count">0</span>
+        <div class="list-pane__tools">
+          <button class="chip" id="btn-fav" aria-pressed="false">只看收藏</button>
+          <select id="sort-by" class="chip chip--select" aria-label="排序方式">
+            <option value="recent">最近更新</option>
+            <option value="name">按名称</option>
+            <option value="created">按创建时间</option>
+          </select>
+        </div>
+      </div>
+      <div class="list" id="list" role="listbox" tabindex="-1"></div>
+      <div class="empty" id="list-empty" hidden>
+        <p class="empty__title">这里还是空的</p>
+        <p class="empty__hint">点「新建」把第一个账号记下来。</p>
+      </div>
+    </section>
+
+    <!-- 右：详情 -->
+    <aside class="detail" id="detail" aria-label="条目详情">
+      <div class="detail__idle" id="detail-idle">
+        <span class="detail__ghost" aria-hidden="true">匣</span>
+        <p>从左边挑一条，这里会显示它的密码。</p>
+      </div>
+      <div class="detail__body" id="detail-body" hidden></div>
+    </aside>
+  </main>
+</div>
+
+<!-- ═══════════════ 模态框 ═══════════════ -->
+<div class="scrim" id="scrim" hidden></div>
+
+<!-- 新建 / 编辑 -->
+<dialog class="sheet sheet--wide" id="dlg-entry">
+  <form method="dialog" class="sheet__form" id="entry-form" autocomplete="off">
+    <header class="sheet__head">
+      <h2 id="entry-title">新建条目</h2>
+      <button class="btn btn--icon" value="cancel" aria-label="关闭">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body">
+      <div class="grid2">
+        <label class="field">
+          <span class="field__label">名称</span>
+          <input id="e-title" type="text" required placeholder="例如 招商银行网银" maxlength="120">
+        </label>
+        <div class="field">
+          <span class="field__label">分类</span>
+          <select id="e-cat"></select>
+          <input id="e-cat-new" type="text" hidden maxlength="24" placeholder="给新分类起个名字">
+        </div>
+      </div>
+      <label class="field">
+        <span class="field__label">网址</span>
+        <input id="e-url" type="text" placeholder="bank.example.com" spellcheck="false">
+      </label>
+      <label class="field">
+        <span class="field__label">账号</span>
+        <input id="e-user" type="text" placeholder="登录名或邮箱" spellcheck="false">
+      </label>
+      <label class="field">
+        <span class="field__label">密码</span>
+        <span class="field__box">
+          <input id="e-pass" type="password" spellcheck="false" placeholder="留空表示这条没有密码">
+          <button type="button" class="reveal" data-reveal="e-pass">显示</button>
+          <button type="button" class="reveal reveal--alt" id="e-gen">生成</button>
+        </span>
+      </label>
+      <div class="meter meter--inline" id="e-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <label class="field">
+        <span class="field__label">标签 <em class="field__hint">用空格或逗号分开</em></span>
+        <input id="e-tags" type="text" placeholder="工作 银行" spellcheck="false">
+      </label>
+      <label class="field">
+        <span class="field__label">备注</span>
+        <textarea id="e-notes" rows="3" placeholder="安全问题、备用邮箱、柜台电话…"></textarea>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="e-fav">
+        <span>标记为收藏</span>
+      </label>
+    </div>
+    <footer class="sheet__foot">
+      <button type="button" class="btn btn--danger-ghost" id="e-delete" hidden>删除这条</button>
+      <span class="spacer"></span>
+      <button class="btn btn--ghost" value="cancel">取消</button>
+      <button class="btn btn--primary" type="submit" id="e-save">保存</button>
+    </footer>
+  </form>
+</dialog>
+
+<!-- 生成器 -->
+<dialog class="sheet" id="dlg-gen">
+  <div class="sheet__form">
+    <header class="sheet__head">
+      <h2>密码生成器</h2>
+      <button class="btn btn--icon" data-close aria-label="关闭">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body">
+      <output class="gen__out" id="gen-out" spellcheck="false"></output>
+      <div class="gen__row">
+        <span class="meter meter--grow" id="gen-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="meter__label" id="gen-label">—</span>
+      </div>
+      <label class="field">
+        <span class="field__label">长度 <b id="gen-len-out">20</b></span>
+        <input type="range" id="gen-len" min="8" max="64" value="20">
+      </label>
+      <div class="gen__opts">
+        <label class="check"><input type="checkbox" id="gen-lower" checked><span>小写 a-z</span></label>
+        <label class="check"><input type="checkbox" id="gen-upper" checked><span>大写 A-Z</span></label>
+        <label class="check"><input type="checkbox" id="gen-digits" checked><span>数字 0-9</span></label>
+        <label class="check"><input type="checkbox" id="gen-symbols" checked><span>符号 !@#$</span></label>
+        <label class="check"><input type="checkbox" id="gen-noamb"><span>排除易混淆 0O1lI|`</span></label>
+      </div>
+      <p class="gen__warn" id="gen-warn" hidden></p>
+    </div>
+    <footer class="sheet__foot">
+      <span class="spacer"></span>
+      <button class="btn btn--ghost" data-close>关闭</button>
+      <button class="btn btn--ghost" id="gen-reroll">换一个</button>
+      <button class="btn btn--primary" id="gen-use">复制</button>
+    </footer>
+  </div>
+</dialog>
+
+<!-- 导入 -->
+<dialog class="sheet" id="dlg-import">
+  <div class="sheet__form">
+    <header class="sheet__head">
+      <h2>导入</h2>
+      <button class="btn btn--icon" data-close aria-label="关闭">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body">
+      <p class="sheet__lede">可以导入密匣自己的加密备份，也可以导入别的工具导出的 CSV。</p>
+      <ol class="steps">
+        <li>选择文件</li>
+        <li>备份要输它自己的主密码，CSV 直接读</li>
+        <li>确认合并方式</li>
+      </ol>
+      <input type="file" id="import-file" accept=".json,.csv,.txt" class="file">
+      <div class="inline-row" id="import-pass-row" hidden>
+        <label class="field field--grow">
+          <span class="field__label">该备份的主密码</span>
+          <input id="import-pass" type="password" placeholder="解密导入文件" autocomplete="off">
+        </label>
+      </div>
+      <label class="field">
+        <span class="field__label">同名条目</span>
+        <select id="import-mode">
+          <option value="merge">保留我的，跳过重复</option>
+          <option value="replace">用导入的覆盖</option>
+        </select>
+      </label>
+      <p class="auth__error" id="import-error" role="alert" hidden></p>
+    </div>
+    <footer class="sheet__foot">
+      <span class="spacer"></span>
+      <button class="btn btn--ghost" data-close>取消</button>
+      <button class="btn btn--primary" id="import-go" disabled>导入</button>
+    </footer>
+  </div>
+</dialog>
+
+<!-- 导出 -->
+<dialog class="sheet" id="dlg-export">
+  <div class="sheet__form">
+    <header class="sheet__head">
+      <h2>导出</h2>
+      <button class="btn btn--icon" data-close aria-label="关闭">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body">
+      <button class="card-action" id="export-enc" type="button">
+        <b>加密备份 <span class="tag-ok">推荐</span></b>
+        <span>一个 .mihsia.json 文件，用主密码加密。换电脑、做备份都用它。</span>
+      </button>
+      <button class="card-action card-action--warn" id="export-csv" type="button">
+        <b>明文 CSV</b>
+        <span>Excel 能直接打开，密码是<b>明文</b>。只在要迁到别的工具时用，导完记得删掉。</span>
+      </button>
+      <p class="sheet__note" id="export-note"></p>
+    </div>
+    <footer class="sheet__foot">
+      <span class="spacer"></span>
+      <button class="btn btn--ghost" data-close>关闭</button>
+    </footer>
+  </div>
+</dialog>
+
+<!-- 关于 -->
+<dialog class="sheet" id="dlg-about">
+  <div class="sheet__form">
+    <header class="sheet__head">
+      <h2>关于与安全说明</h2>
+      <button class="btn btn--icon" data-close aria-label="关闭">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body about">
+      <div class="about__meta">
+        <div><span>版本</span><b id="about-ver">1.0.0</b></div>
+        <div><span>加密</span><b>AES-256-GCM</b></div>
+        <div><span>密钥推导</span><b id="about-kdf">PBKDF2-SHA256 · 600000 轮</b></div>
+        <div><span>数据位置</span><b id="about-path">data/vault.json</b></div>
+      </div>
+      <h3>它是怎么工作的</h3>
+      <p>主密码在这个标签页里用 WebCrypto 推导出密钥，解密数据也只发生在这里。写文件时，脚本只收到一段密文——它从头到尾都没见过明文，也不知道主密码。</p>
+      <h3>它保护不了什么</h3>
+      <ul>
+        <li>这台电脑已经被装了键盘记录器或木马。</li>
+        <li>有人拿到了你的主密码，或者趁你解锁时把窗口留着离开。</li>
+        <li>你把明文 CSV 导出来以后忘了删。</li>
+      </ul>
+      <h3>该做的事</h3>
+      <ul>
+        <li>主密码用一句长口令，别用生日；写一份纸质备份收起来。</li>
+        <li>定期点菜单里的「立即备份密文」，把 <code>data/backups</code> 拷到别处。</li>
+        <li>在公共电脑上用完，点「锁定」再关窗口。</li>
+      </ul>
+    </div>
+    <footer class="sheet__foot">
+      <span class="spacer"></span>
+      <button class="btn btn--ghost" data-close>知道了</button>
+    </footer>
+  </div>
+</dialog>
+
+<!-- 通用确认 -->
+<dialog class="sheet sheet--narrow" id="dlg-confirm">
+  <div class="sheet__form">
+    <header class="sheet__head"><h2 id="confirm-title">确认</h2></header>
+    <div class="sheet__body"><p id="confirm-text"></p></div>
+    <footer class="sheet__foot">
+      <span class="spacer"></span>
+      <button class="btn btn--ghost" id="confirm-no">取消</button>
+      <button class="btn btn--danger" id="confirm-yes">确定</button>
+    </footer>
+  </div>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

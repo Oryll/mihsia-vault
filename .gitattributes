@@ -1,0 +1,4 @@
+# 启动器必须保持原样字节：VBS 是 UTF-16 LE + BOM，任何换行转换都会让 WSH 报错
+*.vbs -text -diff
+*.bat text eol=crlf
+*.png binary
